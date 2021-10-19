@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Request for token</title>
+    <script type="text/javascript">
+        var urlParams = new URLSearchParams(window.location.search);
+        var authCode = urlParams.get('code');
+        var state = urlParams.get('state');
+        var error = urlParams.get('error');
+        var errorDescription = urlParams.get('error_description');
+
+        if (error) {
+            window.alert("The following error took place:" +  error + ". Description of error:" + errorDescription);
+        } else {
+            window.close();
+            window.opener.postAuthorize(state, authCode);
+        }
+        window.close();
+    </script>
+</head>
+<body>
+</body>
+</html>

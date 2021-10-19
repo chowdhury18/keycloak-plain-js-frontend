@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Simple JS Keycloak</title>
+    <style>
+          table,
+          th,
+          td {
+            border: 1px solid black;
+            border-collapse: collapse;
+          }
+    </style>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+    <script>
+        var auth_realm_endpoint = "http://192.168.33.40:30000/auth/realms/Demo-Realm/protocol/openid-connect"
+        var app_redirect_uri = "http://localhost:9091/authCodeReader.html";
+        var root_url = "http://localhost:9091";
+        var app_client_id = "keycloak-plain-js";
+        var app_url = "http://localhost:8000/test/user";
+
+        function generateState(length) {
+            var stateValue = "";
+            var alphaNumericCharacters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            var alphaNumericCharactersLength = alphaNumericCharacters.length;
+            for (var i = 0; i < length; i++) {
+                stateValue += alphaNumericCharacters.charAt(Math.floor(Math.random() * alphaNumericCharactersLength));
+            }
+
+            document.getElementById("stateValue").innerHTML = stateValue;
+        }
+
+        function generateCodeVerifier() {
+            var returnValue = "";
+            var randomByteArray = new Uint8Array(32);
+            window.crypto.getRandomValues(randomByteArray);
+
+            returnValue = base64urlencode(randomByteArray);
+
+            document.getElementById("codeVerifierValue").innerHTML = returnValue;
+        }
+
+        async function generateCodeChallenge() {
+            var codeChallengeValue = "";
+
+            var codeVerifier = document.getElementById("codeVerifierValue").innerHTML;
+
+            var textEncoder = new TextEncoder('US-ASCII');
+            var encodedValue = textEncoder.encode(codeVerifier);
+            var digest = await window.crypto.subtle.digest("SHA-256", encodedValue);
+
+            codeChallengeValue = base64urlencode(Array.from(new Uint8Array(digest)));
+
+            document.getElementById("codeChallengeValue").innerHTML = codeChallengeValue;
+        }
+
+        function base64urlencode(sourceValue) {
+            var stringValue = String.fromCharCode.apply(null, sourceValue);
+            var base64Encoded = btoa(stringValue);
+            var base64urlEncoded = base64Encoded.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+            return base64urlEncoded;
+        }
+
+        function getAuthCode() {
+            var codeChallenge = document.getElementById("codeChallengeValue").innerHTML;
+            var state = document.getElementById("stateValue").innerHTML;
+
+            var authorizationURL = auth_realm_endpoint + "/auth";
+            authorizationURL += "?client_id=" + app_client_id;
+            authorizationURL += "&response_type=code";
+            authorizationURL += "&scope=openid";
+            authorizationURL += "&redirect_uri=" + app_redirect_uri;
+            authorizationURL += "&state=" + state;
+            authorizationURL += "&code_challenge=" + codeChallenge;
+            authorizationURL += "&code_challenge_method=S256";
+
+            window.open(authorizationURL, 'authorizationRequestWindow', 'width=800,height=600,left=200,top=200');
+        };
+
+        function postAuthorize(state, authCode) {
+            var originalStateValue = document.getElementById("stateValue").innerHTML;
+            if(state === originalStateValue) {
+                requestTokens(authCode);
+            } else {
+                alert("Invalid state value received");
+            }
+        }
+
+        function requestTokens(authCode) {
+            var codeVerifier = document.getElementById("codeVerifierValue").innerHTML;
+            var data = {
+                "grant_type": "authorization_code",
+                "client_id": app_client_id,
+                "code": authCode,
+                "code_verifier": codeVerifier,
+                "redirect_uri": app_redirect_uri
+            };
+
+            $.ajax({
+                beforeSend: function (request) {
+                    request.setRequestHeader("Content-type", "application/x-www-form-urlencoded; charset=UTF-8");
+                },
+                type: "POST",
+                url: auth_realm_endpoint + "/token",
+                data: data,
+                success: postRequestAccessToken,
+                error: errorMethod,
+                dataType: "json"
+            });
+        }
+
+        function login() {
+            var authorization =  "bearer " + document.getElementById("accessToken").innerHTML;
+            var header = {
+                "Authorization": authorization,
+                "Access-Control-Allow-Origin": "http://localhost:9091"
+            };
+
+            $.ajax({
+                beforeSend: function (request) {
+                        request.setRequestHeader("Content-type", "application/x-www-form-urlencoded; charset=UTF-8");
+                    },
+                type: "GET",
+                url: app_url,
+                headers: header,
+                dataType: "json"
+            });
+        }
+
+        function logout(){
+          var idToken = document.getElementById("idToken").innerHTML;
+          var logoutURL = auth_realm_endpoint + "/logout";
+          logoutURL += "?id_token_hint=" + idToken;
+          logoutURL += "&post_logout_redirect_uri=" + root_url;
+          window.location.href = logoutURL;
+        }
+
+        function postRequestAccessToken(data, status, jqXHR) {
+            document.getElementById("accessToken").innerHTML = data["access_token"];
+            document.getElementById("idToken").innerHTML = data["id_token"];
+        }
+
+        function errorMethod(data, status, jqXHR) {
+            alert(status);
+        }
+
+
+    </script>
+</head>
+<body>
+    <h1>CF POC Frontend SPA with PKCE</h1>
+    <br/><br/>
+    <table>
+        <tr>
+            <th>#</th>
+            <th>Preliminary Steps</th>
+            <th>Results</th>
+        </tr>
+        <tr>
+            <td>1</td>
+            <td><div><input type="button" value="Generate state value" onclick="generateState(30)"/></div></td>
+            <td><div id="stateValue"></div></td>
+        </tr>
+        <tr>
+            <td>2</td>
+            <td><div><input type="button" value="Generate Code Verifier value" onclick="generateCodeVerifier()"/></div></td>
+            <td><div id="codeVerifierValue"></div></td>
+        </tr>
+        <tr>
+            <td>3</td>
+            <td><div><input type="button" value="Generate Code Challenge value" onclick="generateCodeChallenge()"/></div></td>
+            <td><div id="codeChallengeValue"></div></td>
+        </tr>
+        <tr>
+            <td>4</td>
+            <td><div><input type="button" value="Get Authorization Code" onclick="getAuthCode()"/></div></td>
+            <td><div id="authorizationCode"></div></td>
+        </tr>
+        <tr>
+            <td>5</td>
+            <td><div>
+                <p>Access token: <br/><span id="accessToken"></span></p>
+                <p>Id token: <br/><span id="idToken"></span></p>
+            </div></td>
+        </tr>
+        <tr>
+            <td>6</td>
+            <td><div><input type="button" value="Log in" onclick="login()"/></div></td>
+        </tr>
+        <tr>
+            <td>7</td>
+            <td><div><input type="button" value="Log out" onclick="logout()"/></div></td>
+        </tr>
+    </table>
+</body>
+</html>
