@@ -1,2 +1,1 @@
-# keycloak-plain-js-frontend
-Proof Key for Code Exchange (PKCE) Authorisation Code Flow
+# Keycloak authorization implementation in Vanilla Js
